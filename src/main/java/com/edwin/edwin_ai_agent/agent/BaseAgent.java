@@ -2,9 +2,12 @@ package com.edwin.edwin_ai_agent.agent;
 
 
 import cn.hutool.core.util.StrUtil;
+import com.edwin.edwin_ai_agent.advisor.MyLoggerAdvisor;
 import com.edwin.edwin_ai_agent.agent.model.AgentState;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -21,14 +24,12 @@ import java.util.List;
 @Data
 @Slf4j
 public abstract class BaseAgent {
-
     // 核心属性
     private String name;
 
     // 提示
     private String systemPrompt;
     private String nextStepPrompt;
-
     // 状态
     private AgentState state = AgentState.IDLE;
 
