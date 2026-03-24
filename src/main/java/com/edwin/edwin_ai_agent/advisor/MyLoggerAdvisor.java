@@ -15,7 +15,7 @@ import reactor.core.publisher.Flux;
 @Slf4j
 public class MyLoggerAdvisor implements CallAdvisor, StreamAdvisor {
 
-	private static final Logger logger = LoggerFactory.getLogger(MyLoggerAdvisor.class);
+	//private static final Logger logger = LoggerFactory.getLogger(MyLoggerAdvisor.class);
 
 	@Override
 	public String getName() {
@@ -50,11 +50,11 @@ public class MyLoggerAdvisor implements CallAdvisor, StreamAdvisor {
 	}
 
 	private void logRequest(ChatClientRequest request) {
-		logger.info("AI Request: {}", request.prompt().getUserMessage().getText());
+		log.info("AI Request: {}", request.prompt().getUserMessage().getText());
 	}
 
 	private void logResponse(ChatClientResponse chatClientResponse) {
-		logger.debug("response: {}", chatClientResponse);
+		log.debug("response: {}", chatClientResponse);
 	}
 
 }
