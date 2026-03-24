@@ -2,6 +2,7 @@ package com.edwin.edwin_ai_agent.agent;
 
 import cn.hutool.core.collection.CollUtil;
 import com.alibaba.cloud.ai.dashscope.chat.DashScopeChatOptions;
+import com.edwin.edwin_ai_agent.agent.model.AgentState;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.extern.slf4j.Slf4j;
@@ -116,11 +117,20 @@ public class ToolCallAgent extends ReActAgent {
         setMessageList(toolExecutionResult.conversationHistory());
         // 当前工具调用的结果
         ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
+        // 判断是否调用了终止工具
+        boolean terminateToolCalled = toolResponseMessage.getResponses().stream()
+                .anyMatch(response -> "doTerminate".equals(response.name()));
+        if (terminateToolCalled) {
+            setState(AgentState.FINISHED);
+        }
+
         String results = toolResponseMessage.getResponses().stream()
                 .map(response -> "工具 " + response.name() + " 完成了它的任务！结果: " + response.responseData())
                 .collect(Collectors.joining("\n"));
+
         log.info(results);
         return results;
+
     }
 
 }
