@@ -16,6 +16,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.model.tool.ToolExecutionResult;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.util.StringUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -50,88 +51,231 @@ public class ToolCallAgent extends ReActAgent {
                 .build();
     }
 
-    /**
-     * 处理当前状态并决定下一步行动
-     *
-     * @return 是否需要执行行动
-     */
+    ///**
+    // * 处理当前状态并决定下一步行动
+    // *
+    // * @return 是否需要执行行动
+    // */
+    //@Override
+    //public boolean think() {
+    //    if (getNextStepPrompt() != null && !getNextStepPrompt().isEmpty()) {
+    //        UserMessage userMessage = new UserMessage(getNextStepPrompt());
+    //        getMessageList().add(userMessage);
+    //    }
+    //    List<Message> messageList = getMessageList();
+    //    Prompt prompt = new Prompt(messageList, chatOptions);
+    //    try {
+    //        // 获取带工具选项的响应
+    //        ChatResponse chatResponse = getChatClient().prompt(prompt)
+    //                .system(getSystemPrompt())
+    //                .toolCallbacks(availableTools)  //旧版本是tools()
+    //                .call()
+    //                .chatResponse();
+    //        // 记录响应，用于 Act
+    //        this.toolCallChatResponse = chatResponse;
+    //        AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
+    //        // 输出提示信息
+    //        String result = assistantMessage.getText();
+    //        List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();
+    //        log.info(getName() + "的思考: " + result);
+    //        log.info(getName() + "选择了 " + toolCallList.size() + " 个工具来使用");
+    //        String toolCallInfo = toolCallList.stream()
+    //                .map(toolCall -> String.format("工具名称：%s，参数：%s",
+    //                        toolCall.name(),
+    //                        toolCall.arguments())
+    //                )
+    //                .collect(Collectors.joining("\n"));
+    //        log.info(toolCallInfo);
+    //        if (toolCallList.isEmpty()) {
+    //            // 只有不调用工具时，才记录助手消息
+    //            getMessageList().add(assistantMessage);
+    //            return false;
+    //        } else {
+    //            // 需要调用工具时，无需记录助手消息，因为调用工具时会自动记录
+    //            return true;
+    //        }
+    //    } catch (Exception e) {
+    //        log.error(getName() + "的思考过程遇到了问题: " + e.getMessage());
+    //        getMessageList().add(
+    //                new AssistantMessage("处理时遇到错误: " + e.getMessage()));
+    //        return false;
+    //    }
+    //}
+    private String lastAssistantText = "";
     @Override
     public boolean think() {
         if (getNextStepPrompt() != null && !getNextStepPrompt().isEmpty()) {
             UserMessage userMessage = new UserMessage(getNextStepPrompt());
             getMessageList().add(userMessage);
         }
+
         List<Message> messageList = getMessageList();
         Prompt prompt = new Prompt(messageList, chatOptions);
+
         try {
-            // 获取带工具选项的响应
             ChatResponse chatResponse = getChatClient().prompt(prompt)
                     .system(getSystemPrompt())
-                    .toolCallbacks(availableTools)  //旧版本是tools()
+                    .toolCallbacks(availableTools)
                     .call()
                     .chatResponse();
-            // 记录响应，用于 Act
+
             this.toolCallChatResponse = chatResponse;
+
             AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
-            // 输出提示信息
             String result = assistantMessage.getText();
+            this.lastAssistantText = result;
+
             List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();
+
             log.info(getName() + "的思考: " + result);
             log.info(getName() + "选择了 " + toolCallList.size() + " 个工具来使用");
+
             String toolCallInfo = toolCallList.stream()
                     .map(toolCall -> String.format("工具名称：%s，参数：%s",
                             toolCall.name(),
-                            toolCall.arguments())
-                    )
+                            toolCall.arguments()))
                     .collect(Collectors.joining("\n"));
-            log.info(toolCallInfo);
+
+            if (StringUtils.hasText(toolCallInfo)) {
+                log.info(toolCallInfo);
+            }
+
             if (toolCallList.isEmpty()) {
-                // 只有不调用工具时，才记录助手消息
                 getMessageList().add(assistantMessage);
                 return false;
-            } else {
-                // 需要调用工具时，无需记录助手消息，因为调用工具时会自动记录
-                return true;
             }
+
+            return true;
         } catch (Exception e) {
-            log.error(getName() + "的思考过程遇到了问题: " + e.getMessage());
-            getMessageList().add(
-                    new AssistantMessage("处理时遇到错误: " + e.getMessage()));
+            log.error(getName() + "的思考过程遇到了问题: " + e.getMessage(), e);
+            this.lastAssistantText = "处理时遇到错误: " + e.getMessage();
+            getMessageList().add(new AssistantMessage(this.lastAssistantText));
             return false;
         }
     }
-    /**
-     * 执行工具调用并处理结果
-     *
-     * @return 执行结果
-     */
+    @Override
+    public String step() {
+        try {
+            boolean shouldAct = think();
+
+            if (!shouldAct) {
+                if (StringUtils.hasText(lastAssistantText)) {
+                    setState(AgentState.FINISHED);
+                    return """
+                        
+                        [最终回复]
+                        %s
+                        """.formatted(lastAssistantText);
+                }
+                return "";
+            }
+
+            return act();
+        } catch (Exception e) {
+            log.error("步骤执行失败", e);
+            return """
+                
+                [系统错误]
+                %s
+                """.formatted(e.getMessage());
+        }
+    }
+
+
+    ///**
+    // * 执行工具调用并处理结果
+    // *
+    // * @return 执行结果
+    // */
+    //@Override
+    //public String act() {
+    //    if (!toolCallChatResponse.hasToolCalls()) {
+    //        return "没有工具调用";
+    //    }
+    //    // 调用工具
+    //    Prompt prompt = new Prompt(getMessageList(), chatOptions);
+    //    ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, toolCallChatResponse);
+    //    // 记录消息上下文，conversationHistory 已经包含了助手消息和工具调用返回的结果
+    //    setMessageList(toolExecutionResult.conversationHistory());
+    //    // 当前工具调用的结果
+    //    ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
+    //    // 判断是否调用了终止工具
+    //    boolean terminateToolCalled = toolResponseMessage.getResponses().stream()
+    //            .anyMatch(response -> "doTerminate".equals(response.name()));
+    //    if (terminateToolCalled) {
+    //        setState(AgentState.FINISHED);
+    //    }
+    //
+    //    String results = toolResponseMessage.getResponses().stream()
+    //            .map(response -> "工具 " + response.name() + " 完成了它的任务！结果: " + response.responseData())
+    //            .collect(Collectors.joining("\n"));
+    //
+    //    log.info(results);
+    //    return results;
+    //
+    //}
+
     @Override
     public String act() {
         if (!toolCallChatResponse.hasToolCalls()) {
-            return "没有工具调用";
-        }
-        // 调用工具
-        Prompt prompt = new Prompt(getMessageList(), chatOptions);
-        ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, toolCallChatResponse);
-        // 记录消息上下文，conversationHistory 已经包含了助手消息和工具调用返回的结果
-        setMessageList(toolExecutionResult.conversationHistory());
-        // 当前工具调用的结果
-        ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
-        // 判断是否调用了终止工具
-        boolean terminateToolCalled = toolResponseMessage.getResponses().stream()
-                .anyMatch(response -> "doTerminate".equals(response.name()));
-        if (terminateToolCalled) {
-            setState(AgentState.FINISHED);
+            return "";
         }
 
+        AssistantMessage assistantMessage = toolCallChatResponse.getResult().getOutput();
+        String assistantText = assistantMessage.getText();
+        if (StringUtils.hasText(assistantText)) {
+            this.lastAssistantText = assistantText;
+        }
+
+        Prompt prompt = new Prompt(getMessageList(), chatOptions);
+        ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, toolCallChatResponse);
+
+        setMessageList(toolExecutionResult.conversationHistory());
+
+        ToolResponseMessage toolResponseMessage =
+                (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
+
+        boolean terminateToolCalled = toolResponseMessage.getResponses().stream()
+                .anyMatch(response -> "doTerminate".equals(response.name()));
+
         String results = toolResponseMessage.getResponses().stream()
+                .filter(response -> !"doTerminate".equals(response.name()))
                 .map(response -> "工具 " + response.name() + " 完成了它的任务！结果: " + response.responseData())
                 .collect(Collectors.joining("\n"));
 
-        log.info(results);
-        return results;
+        if (StringUtils.hasText(results)) {
+            log.info(results);
+        }
 
+        StringBuilder output = new StringBuilder();
+
+        if (StringUtils.hasText(results)) {
+            output.append("""
+                
+                [思考过程 - Step %d]
+                %s
+                """.formatted(getCurrentStep(), results));
+        }
+
+        if (terminateToolCalled) {
+            setState(AgentState.FINISHED);
+
+            if (StringUtils.hasText(lastAssistantText)) {
+                if (output.length() > 0) {
+                    output.append("\n");
+                }
+                output.append("""
+                    [最终回复]
+                    %s
+                    """.formatted(lastAssistantText));
+            }
+        }
+
+        return output.toString();
     }
+
+
+
 
 }
 
