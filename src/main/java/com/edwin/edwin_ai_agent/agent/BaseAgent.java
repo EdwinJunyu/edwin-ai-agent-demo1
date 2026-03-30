@@ -139,12 +139,19 @@ public abstract class BaseAgent {
                         currentStep = stepNumber;
                         log.info("Executing step " + stepNumber + "/" + maxSteps);
 
-                        // 单步执行
-                        String stepResult = step();
-                        String result = "Step " + stepNumber + ": " + stepResult;
-
+                        //// 单步执行
+                        //String stepResult = step();
+                        //String result = "Step " + stepNumber + ": " + stepResult;
                         // 发送每一步的结果
-                        emitter.send(result);
+                        //emitter.send(result);
+                        String stepResult = step();
+
+                        // 只把真正需要展示给前端的内容发出去，避免把内部步骤编号和空内容推到页面
+                        if (StrUtil.isNotBlank(stepResult)) {
+                            emitter.send(stepResult);
+                        }
+
+
                     }
                     // 检查是否超出步骤限制
                     if (currentStep >= maxSteps) {
